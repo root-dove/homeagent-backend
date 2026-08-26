@@ -1,3 +1,4 @@
+from app.schemas.capture import CaptureResponse
 from app.schemas.cleanliness import (
     AreaAssessment,
     CleanlinessAnalysisResult,
@@ -19,6 +20,7 @@ from app.schemas.mode import ModeCreate, ModeResponse
 
 __all__ = [
     "AreaAssessment",
+    "CaptureResponse",
     "CleanlinessAnalysisResult",
     "CommandClaimRequest",
     "CommandClaimResponse",

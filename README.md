@@ -14,11 +14,12 @@ HomeAgent의 모드 상태, 촬영 스케줄, 비전 분석과 알림 이벤트�
 - PostgreSQL 기반 영속 스케줄러와 실행 작업 큐
 - 카메라 장치 등록·API 키 인증·heartbeat와 연결 상태 계산
 - 임대 기반 촬영 작업 수령·완료·실패·재시도 API
+- JPEG 검증·크기 제한·비공개 볼륨을 적용한 멱등 사진 업로드 API
 - Asia/Seoul 기본 방해 금지 및 모드별 재정의 정책
 - Docker Compose 기반 API·PostgreSQL 개발 환경
 - pytest와 Ruff 검증 환경
 
-실제 사진 촬영·업로드와 비전 모델은 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
+실제 카메라 촬영과 비전 모델 연결은 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
 
 ## 빠른 실행
 
@@ -83,10 +84,25 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/modes" `
 - `GET /api/v1/devices`: 장치 목록과 online/offline 상태 조회
 - `POST /api/v1/devices/heartbeat`: 에이전트·카메라 상태 보고
 - `POST /api/v1/devices/commands/claim`: queued 촬영 작업을 임대 방식으로 수령
-- `POST /api/v1/devices/commands/{run_id}/complete`: 촬영 작업 완료 보고
+- `POST /api/v1/devices/commands/{run_id}/capture`: JPEG 업로드 및 촬영 작업 완료
+- `POST /api/v1/devices/commands/{run_id}/complete`: 저장된 capture가 있는 작업의 완료 재확인
 - `POST /api/v1/devices/commands/{run_id}/fail`: 실패 보고 및 재시도 요청
 
 등록·목록 API에는 `X-HomeAgent-Registration-Token`, 장치 API에는 `X-HomeAgent-Device-Key` 헤더를 사용합니다. 작업을 수령하면 설정된 임대 시간 안에 완료 또는 실패를 보고해야 하며, 만료된 작업은 최대 시도 횟수까지 다시 대기열에 들어갑니다. 완료·최종 실패 재호출은 작업 ID 기준으로 멱등 처리됩니다.
+
+## 사진 업로드와 보존
+
+촬영 작업은 multipart 형식으로 `captured_at`과 `image/jpeg` 파일을 업로드합니다. 서버는 원본 파일명을 사용하지 않고 capture UUID로 저장하며, 다음 검증을 모두 통과한 경우에만 DB 기록과 작업 완료를 커밋합니다.
+
+- 실제 JPEG 디코딩 검증
+- 기본 최소 해상도 1280×720
+- 기본 최대 5천만 픽셀과 15MB 제한
+- 시간대가 포함된 촬영 시각 및 허용 범위 검사
+- 작업을 임대한 장치와 임대 만료 시각 확인
+
+같은 `run_id`를 다시 업로드하면 기존 capture를 반환하므로 파일을 중복 저장하지 않습니다. 파일은 `/service/data/captures`의 Docker 비공개 볼륨에 저장되고 API 응답에는 내부 경로가 노출되지 않습니다. 기본 만료 시각은 업로드 후 7일이며, 실제 만료 파일 삭제 작업은 다음 단계에서 구현합니다.
+
+사진이 없는 촬영 작업은 `/complete`만 호출해 완료할 수 없습니다. 업로드와 DB 저장이 성공해야 작업이 `completed`로 바뀝니다.
 
 종료:
 
@@ -139,6 +155,12 @@ pytest
 | `DEVICE_OFFLINE_AFTER_SECONDS` | heartbeat 이후 offline 판정 시간(초) | `90` |
 | `DEVICE_COMMAND_LEASE_SECONDS` | 수령한 작업의 처리 임대 시간(초) | `120` |
 | `DEVICE_COMMAND_MAX_ATTEMPTS` | 만료·실패 작업의 최대 시도 횟수 | `3` |
+| `CAPTURE_STORAGE_DIR` | 원본 사진 비공개 저장 경로 | `./data/captures` |
+| `CAPTURE_MAX_UPLOAD_BYTES` | 사진 한 장 최대 크기 | `15728640` |
+| `CAPTURE_RETENTION_DAYS` | 사진 만료 시각 계산 일수 | `7` |
+| `CAPTURE_MIN_WIDTH` | 허용할 최소 너비 | `1280` |
+| `CAPTURE_MIN_HEIGHT` | 허용할 최소 높이 | `720` |
+| `CAPTURE_MAX_PIXELS` | 이미지 폭×높이 최대값 | `50000000` |
 | `POSTGRES_DB` | Compose PostgreSQL DB 이름 | `homeagent` |
 | `POSTGRES_USER` | Compose PostgreSQL 사용자 | `homeagent` |
 | `POSTGRES_PASSWORD` | Compose PostgreSQL 비밀번호 | 로컬에서 변경 권장 |

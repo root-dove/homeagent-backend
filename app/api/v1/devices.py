@@ -1,16 +1,27 @@
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
-from app.models import Device
+from app.models import Capture, Device
 from app.schemas import (
+    CaptureResponse,
     CommandClaimRequest,
     CommandClaimResponse,
     CommandFailureRequest,
@@ -20,6 +31,18 @@ from app.schemas import (
     DeviceRegisterRequest,
     DeviceRegistrationResponse,
     DeviceResponse,
+)
+from app.services.capture_storage import (
+    CaptureStorageError,
+    CaptureTooLarge,
+    InvalidCapture,
+    LocalCaptureStorage,
+    StagedCapture,
+)
+from app.services.captures import (
+    InvalidCapturedAt,
+    normalize_captured_at,
+    prepare_capture_target,
 )
 from app.services.device_commands import (
     ClaimedCommand,
@@ -160,6 +183,109 @@ def claim_device_commands(
     return CommandClaimResponse(commands=[_command_response(command) for command in commands])
 
 
+@router.post(
+    "/commands/{run_id}/capture",
+    response_model=CaptureResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_device_capture(
+    run_id: UUID,
+    device: AuthenticatedDevice,
+    session: DatabaseSession,
+    settings: AppSettings,
+    response: Response,
+    captured_at: Annotated[datetime, Form()],
+    file: Annotated[UploadFile, File()],
+) -> CaptureResponse:
+    request_now = datetime.now(UTC)
+    storage = LocalCaptureStorage(
+        settings.capture_storage_dir,
+        max_upload_bytes=settings.capture_max_upload_bytes,
+        min_width=settings.capture_min_width,
+        min_height=settings.capture_min_height,
+        max_pixels=settings.capture_max_pixels,
+    )
+    staged: StagedCapture | None = None
+    final_relative_path: str | None = None
+    committed = False
+    try:
+        target = prepare_capture_target(
+            session,
+            device=device,
+            run_id=run_id,
+            now=request_now,
+        )
+        if target.existing is not None:
+            response.status_code = status.HTTP_200_OK
+            response.headers["X-HomeAgent-Idempotent-Replay"] = "true"
+            return _capture_response(target.existing, replayed=True)
+
+        normalized_captured_at = normalize_captured_at(captured_at, now=request_now)
+        staged = storage.stage_jpeg(file.file, content_type=file.content_type)
+        capture_id = uuid4()
+        final_relative_path = storage.finalize(staged, capture_id=str(capture_id))
+        completion_now = datetime.now(UTC)
+        capture = Capture(
+            id=capture_id,
+            run_id=target.run.id,
+            device_id=device.id,
+            captured_at=normalized_captured_at,
+            content_type="image/jpeg",
+            size_bytes=staged.size_bytes,
+            sha256=staged.sha256,
+            width=staged.width,
+            height=staged.height,
+            quality_status="valid",
+            file_path=final_relative_path,
+            expires_at=completion_now + timedelta(days=settings.capture_retention_days),
+        )
+        session.add(capture)
+        complete_command(
+            session,
+            device=device,
+            run_id=run_id,
+            now=completion_now,
+        )
+        session.commit()
+        committed = True
+        session.refresh(capture)
+        return _capture_response(capture)
+    except CommandNotFound as error:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except (CommandConflict, CommandLeaseExpired) as error:
+        session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except CaptureTooLarge as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=str(error),
+        ) from error
+    except (InvalidCapture, InvalidCapturedAt) as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+    except CaptureStorageError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(error),
+        ) from error
+    except IntegrityError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Capture for command '{run_id}' already exists.",
+        ) from error
+    finally:
+        storage.discard_staged(staged)
+        if not committed:
+            storage.remove(final_relative_path)
+
+
 @router.post("/commands/{run_id}/complete", response_model=CommandResultResponse)
 def complete_device_command(
     run_id: UUID,
@@ -168,6 +294,17 @@ def complete_device_command(
     response: Response,
 ) -> CommandResultResponse:
     try:
+        target = prepare_capture_target(
+            session,
+            device=device,
+            run_id=run_id,
+            now=datetime.now(UTC),
+        )
+        if target.existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Capture must be uploaded before completing a capture command.",
+            )
         result = complete_command(
             session,
             device=device,
@@ -272,4 +409,21 @@ def _command_result_response(result: CommandResult) -> CommandResultResponse:
         mode_runtime_state=result.mode_runtime_state,
         replayed=result.replayed,
         retry_scheduled=result.retry_scheduled,
+    )
+
+
+def _capture_response(capture: Capture, *, replayed: bool = False) -> CaptureResponse:
+    return CaptureResponse(
+        id=capture.id,
+        run_id=capture.run_id,
+        device_id=capture.device_id,
+        captured_at=capture.captured_at,
+        content_type=capture.content_type,
+        size_bytes=capture.size_bytes,
+        sha256=capture.sha256,
+        width=capture.width,
+        height=capture.height,
+        quality_status=capture.quality_status,
+        expires_at=capture.expires_at,
+        replayed=replayed,
     )

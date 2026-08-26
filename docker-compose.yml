@@ -36,6 +36,12 @@ services:
       DEVICE_OFFLINE_AFTER_SECONDS: ${DEVICE_OFFLINE_AFTER_SECONDS:-90}
       DEVICE_COMMAND_LEASE_SECONDS: ${DEVICE_COMMAND_LEASE_SECONDS:-120}
       DEVICE_COMMAND_MAX_ATTEMPTS: ${DEVICE_COMMAND_MAX_ATTEMPTS:-3}
+      CAPTURE_STORAGE_DIR: /service/data/captures
+      CAPTURE_MAX_UPLOAD_BYTES: ${CAPTURE_MAX_UPLOAD_BYTES:-15728640}
+      CAPTURE_RETENTION_DAYS: ${CAPTURE_RETENTION_DAYS:-7}
+      CAPTURE_MIN_WIDTH: ${CAPTURE_MIN_WIDTH:-1280}
+      CAPTURE_MIN_HEIGHT: ${CAPTURE_MIN_HEIGHT:-720}
+      CAPTURE_MAX_PIXELS: ${CAPTURE_MAX_PIXELS:-50000000}
     command: >-
       sh -c "alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
@@ -44,7 +50,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - capture_data:/service/data
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  capture_data:

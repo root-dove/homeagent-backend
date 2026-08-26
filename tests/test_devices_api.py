@@ -278,7 +278,7 @@ def test_only_one_device_can_claim_a_queued_command(
     assert second.json()["commands"] == []
 
 
-def test_command_completion_is_idempotent(
+def test_capture_command_cannot_complete_before_upload(
     client: TestClient,
     session_factory: sessionmaker[Session],
 ) -> None:
@@ -291,21 +291,17 @@ def test_command_completion_is_idempotent(
     )
     assert claimed.status_code == 200
 
-    first = client.post(
-        f"/api/v1/devices/commands/{run_id}/complete",
-        headers={"X-HomeAgent-Device-Key": api_key},
-    )
-    second = client.post(
+    response = client.post(
         f"/api/v1/devices/commands/{run_id}/complete",
         headers={"X-HomeAgent-Device-Key": api_key},
     )
 
-    assert first.status_code == 200
-    assert first.json()["status"] == ModeRunStatus.COMPLETED.value
-    assert first.json()["replayed"] is False
-    assert second.status_code == 200
-    assert second.json()["replayed"] is True
-    assert second.headers["X-HomeAgent-Idempotent-Replay"] == "true"
+    assert response.status_code == 409
+    assert "uploaded before completing" in response.json()["detail"]
+    with session_factory() as session:
+        run = session.get(ModeRun, UUID(run_id))
+        assert run is not None
+        assert run.status == ModeRunStatus.PROCESSING.value
 
 
 def test_retryable_failure_requeues_then_exhaustion_moves_mode_to_error(

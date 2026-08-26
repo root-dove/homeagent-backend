@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +28,13 @@ class Settings(BaseSettings):
     device_offline_after_seconds: int = Field(default=90, gt=0)
     device_command_lease_seconds: int = Field(default=120, gt=0)
     device_command_max_attempts: int = Field(default=3, gt=0)
+
+    capture_storage_dir: Path = Path("./data/captures")
+    capture_max_upload_bytes: int = Field(default=15 * 1024 * 1024, gt=0)
+    capture_retention_days: int = Field(default=7, gt=0)
+    capture_min_width: int = Field(default=1280, gt=0)
+    capture_min_height: int = Field(default=720, gt=0)
+    capture_max_pixels: int = Field(default=50_000_000, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=".env",
