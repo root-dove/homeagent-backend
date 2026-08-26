@@ -1,3 +1,4 @@
+from app.domain.cleanliness.analysis import AnalysisClassification
 from app.domain.cleanliness.state_machine import (
     CleanlinessState,
     CleanlinessTrigger,
@@ -8,6 +9,7 @@ from app.domain.cleanliness.state_machine import (
 )
 
 __all__ = [
+    "AnalysisClassification",
     "CleanlinessState",
     "CleanlinessTrigger",
     "InvalidStateTransition",

@@ -9,11 +9,12 @@ HomeAgent의 모드 상태, 촬영 스케줄, 비전 분석과 알림 이벤트�
 - SQLAlchemy 2와 psycopg 3 연결 기반
 - Alembic 마이그레이션과 공통 모드·상태 이력 모델
 - 모드 등록·조회 및 멱등 활성·비활성 API
-- 청결 모드 상태 전이 규칙
+- 청결 모드 상태 전이와 청소 완료 검사 API
+- 침대·책상·바닥 등 영역별 청결 분석 결과 스키마
 - Docker Compose 기반 API·PostgreSQL 개발 환경
 - pytest와 Ruff 검증 환경
 
-촬영·분석·스케줄러와 카메라 장치 API는 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
+실제 촬영·비전 모델·영속 스케줄러와 카메라 장치 API는 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
 
 ## 빠른 실행
 
@@ -52,8 +53,13 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/modes" `
 - `GET /api/v1/modes/{instance_key}`: 단일 모드 조회
 - `POST /api/v1/modes/{instance_key}/enable`: 모드 활성화
 - `POST /api/v1/modes/{instance_key}/disable`: 모드 비활성화
+- `POST /api/v1/modes/{instance_key}/analysis/start`: 정기 또는 재시도 분석 시작
+- `POST /api/v1/modes/{instance_key}/analysis/result`: 구조화된 분석 결과 반영
+- `POST /api/v1/modes/{instance_key}/cleaning-complete`: 청소 완료 후 검증 시작
 
 활성·비활성 요청은 멱등하게 처리됩니다. 비활성화해도 `DIRTY` 같은 내부 실행 상태는 보존되며, 비활성 상태에서 남아 있던 다음 실행 예약만 제거합니다.
+
+현재 `analysis/result`는 실제 비전 제공자를 연결하기 전에 가짜 결과로 전체 상태 흐름을 검증하기 위한 입력점이기도 합니다. 결과에는 전체 판정뿐 아니라 영역별 점수, 판정과 문제 목록이 필요합니다. 실제 제공자 연결 후에도 같은 스키마를 사용합니다.
 
 종료:
 
