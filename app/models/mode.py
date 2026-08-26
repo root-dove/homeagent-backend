@@ -94,6 +94,7 @@ class ModeRun(Base):
             "mode_state_version",
             name="uq_mode_runs_mode_state_version",
         ),
+        Index("ix_mode_runs_claim", "status", "lease_expires_at", "created_at"),
         Index("ix_mode_runs_status_created", "status", "created_at"),
         Index("ix_mode_runs_mode_created", "mode_id", "created_at"),
     )
@@ -116,5 +117,11 @@ class ModeRun(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(String(500))
+    assigned_device_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+    )
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     mode: Mapped[Mode] = relationship(back_populates="runs")

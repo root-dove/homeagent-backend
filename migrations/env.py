@@ -5,9 +5,9 @@ from sqlalchemy import create_engine, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models import Mode, ModeRun, ModeStateHistory
+from app.models import Device, Mode, ModeRun, ModeStateHistory
 
-_registered_models = (Mode, ModeRun, ModeStateHistory)
+_registered_models = (Device, Mode, ModeRun, ModeStateHistory)
 
 config = context.config
 
