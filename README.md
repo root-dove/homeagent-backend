@@ -7,11 +7,13 @@ HomeAgent의 모드 상태, 촬영 스케줄, 비전 분석과 알림 이벤트�
 - FastAPI 애플리케이션과 버전이 명시된 `/api/v1` 경로
 - 애플리케이션 및 PostgreSQL 상태 확인 API
 - SQLAlchemy 2와 psycopg 3 연결 기반
-- Alembic 마이그레이션 기준선
+- Alembic 마이그레이션과 공통 모드·상태 이력 모델
+- 모드 등록·조회 및 멱등 활성·비활성 API
+- 청결 모드 상태 전이 규칙
 - Docker Compose 기반 API·PostgreSQL 개발 환경
 - pytest와 Ruff 검증 환경
 
-청결 모드와 카메라 장치 API는 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
+촬영·분석·스케줄러와 카메라 장치 API는 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
 
 ## 빠른 실행
 
@@ -27,6 +29,31 @@ docker compose up --build
 - API 문서: <http://localhost:8000/docs>
 - 생존 상태: <http://localhost:8000/api/v1/health/live>
 - 준비 상태: <http://localhost:8000/api/v1/health>
+
+## 모드 API
+
+모드는 확장 가능한 `instance_key`로 식별합니다. 초기 청결 모드는 다음 요청으로 등록합니다.
+
+```powershell
+$body = @{
+    instance_key = "cleanliness"
+    mode_type = "cleanliness"
+    name = "청결 모드"
+    config = @{ interval_minutes = 30 }
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8000/api/v1/modes" `
+    -Method Post -ContentType "application/json" -Body $body
+```
+
+주요 경로:
+
+- `GET /api/v1/modes`: 전체 모드 조회
+- `GET /api/v1/modes/{instance_key}`: 단일 모드 조회
+- `POST /api/v1/modes/{instance_key}/enable`: 모드 활성화
+- `POST /api/v1/modes/{instance_key}/disable`: 모드 비활성화
+
+활성·비활성 요청은 멱등하게 처리됩니다. 비활성화해도 `DIRTY` 같은 내부 실행 상태는 보존되며, 비활성 상태에서 남아 있던 다음 실행 예약만 제거합니다.
 
 종료:
 
