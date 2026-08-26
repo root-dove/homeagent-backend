@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,12 +16,17 @@ class Settings(BaseSettings):
     database_connect_timeout_seconds: int = 3
 
     scheduler_enabled: bool = False
-    scheduler_poll_interval_seconds: float = 10
-    scheduler_batch_size: int = 10
+    scheduler_poll_interval_seconds: float = Field(default=10, gt=0)
+    scheduler_batch_size: int = Field(default=10, gt=0)
     quiet_hours_enabled: bool = True
     quiet_hours_timezone: str = "Asia/Seoul"
     quiet_hours_start: str = "23:00"
     quiet_hours_end: str = "07:00"
+
+    device_registration_token: str | None = None
+    device_offline_after_seconds: int = Field(default=90, gt=0)
+    device_command_lease_seconds: int = Field(default=120, gt=0)
+    device_command_max_attempts: int = Field(default=3, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -12,11 +12,13 @@ HomeAgent의 모드 상태, 촬영 스케줄, 비전 분석과 알림 이벤트�
 - 청결 모드 상태 전이와 청소 완료 검사 API
 - 침대·책상·바닥 등 영역별 청결 분석 결과 스키마
 - PostgreSQL 기반 영속 스케줄러와 실행 작업 큐
+- 카메라 장치 등록·API 키 인증·heartbeat와 연결 상태 계산
+- 임대 기반 촬영 작업 수령·완료·실패·재시도 API
 - Asia/Seoul 기본 방해 금지 및 모드별 재정의 정책
 - Docker Compose 기반 API·PostgreSQL 개발 환경
 - pytest와 Ruff 검증 환경
 
-실제 촬영·비전 모델과 카메라 장치 API는 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
+실제 사진 촬영·업로드와 비전 모델은 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
 
 ## 빠른 실행
 
@@ -71,6 +73,21 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/modes" `
 
 현재는 촬영 작업 소비자가 없으므로 `SCHEDULER_ENABLED=false`가 기본입니다. 카메라 작업 관리자를 연결한 뒤 `true`로 변경합니다.
 
+## 카메라 장치 API
+
+장치 등록은 서버 운영자가 설정한 `DEVICE_REGISTRATION_TOKEN`을 사용합니다. 등록 성공 시 장치 API 키가 한 번만 반환되므로 라즈베리파이의 권한이 제한된 설정 파일에 저장해야 합니다. 서버에는 원문 키가 아닌 PBKDF2-SHA256 해시만 저장됩니다.
+
+주요 경로:
+
+- `POST /api/v1/devices/register`: 장치 등록 및 최초 API 키 발급
+- `GET /api/v1/devices`: 장치 목록과 online/offline 상태 조회
+- `POST /api/v1/devices/heartbeat`: 에이전트·카메라 상태 보고
+- `POST /api/v1/devices/commands/claim`: queued 촬영 작업을 임대 방식으로 수령
+- `POST /api/v1/devices/commands/{run_id}/complete`: 촬영 작업 완료 보고
+- `POST /api/v1/devices/commands/{run_id}/fail`: 실패 보고 및 재시도 요청
+
+등록·목록 API에는 `X-HomeAgent-Registration-Token`, 장치 API에는 `X-HomeAgent-Device-Key` 헤더를 사용합니다. 작업을 수령하면 설정된 임대 시간 안에 완료 또는 실패를 보고해야 하며, 만료된 작업은 최대 시도 횟수까지 다시 대기열에 들어갑니다. 완료·최종 실패 재호출은 작업 ID 기준으로 멱등 처리됩니다.
+
 종료:
 
 ```powershell
@@ -118,6 +135,10 @@ pytest
 | `QUIET_HOURS_TIMEZONE` | 방해 금지 기준 시간대 | `Asia/Seoul` |
 | `QUIET_HOURS_START` | 방해 금지 시작 | `23:00` |
 | `QUIET_HOURS_END` | 방해 금지 종료 | `07:00` |
+| `DEVICE_REGISTRATION_TOKEN` | 장치 등록·관리용 비밀 토큰 | 반드시 별도 설정 |
+| `DEVICE_OFFLINE_AFTER_SECONDS` | heartbeat 이후 offline 판정 시간(초) | `90` |
+| `DEVICE_COMMAND_LEASE_SECONDS` | 수령한 작업의 처리 임대 시간(초) | `120` |
+| `DEVICE_COMMAND_MAX_ATTEMPTS` | 만료·실패 작업의 최대 시도 횟수 | `3` |
 | `POSTGRES_DB` | Compose PostgreSQL DB 이름 | `homeagent` |
 | `POSTGRES_USER` | Compose PostgreSQL 사용자 | `homeagent` |
 | `POSTGRES_PASSWORD` | Compose PostgreSQL 비밀번호 | 로컬에서 변경 권장 |
