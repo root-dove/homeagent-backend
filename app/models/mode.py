@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
     Uuid,
     func,
 )
@@ -55,6 +56,11 @@ class Mode(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    runs: Mapped[list[ModeRun]] = relationship(
+        back_populates="mode",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class ModeStateHistory(Base):
@@ -78,3 +84,37 @@ class ModeStateHistory(Base):
     )
 
     mode: Mapped[Mode] = relationship(back_populates="state_history")
+
+
+class ModeRun(Base):
+    __tablename__ = "mode_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "mode_id",
+            "mode_state_version",
+            name="uq_mode_runs_mode_state_version",
+        ),
+        Index("ix_mode_runs_status_created", "status", "created_at"),
+        Index("ix_mode_runs_mode_created", "mode_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    mode_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("modes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    mode_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(String(500))
+
+    mode: Mapped[Mode] = relationship(back_populates="runs")

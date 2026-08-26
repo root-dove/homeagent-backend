@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_connect_timeout_seconds: int = 3
 
+    scheduler_enabled: bool = False
+    scheduler_poll_interval_seconds: float = 10
+    scheduler_batch_size: int = 10
+    quiet_hours_enabled: bool = True
+    quiet_hours_timezone: str = "Asia/Seoul"
+    quiet_hours_start: str = "23:00"
+    quiet_hours_end: str = "07:00"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
