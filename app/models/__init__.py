@@ -1,3 +1,3 @@
-from app.models.mode import Mode, ModeStateHistory
+from app.models.mode import Mode, ModeRun, ModeStateHistory
 
-__all__ = ["Mode", "ModeStateHistory"]
+__all__ = ["Mode", "ModeRun", "ModeStateHistory"]
