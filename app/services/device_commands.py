@@ -85,14 +85,14 @@ def complete_command(
     run_id: UUID,
     now: datetime,
 ) -> CommandResult:
-    run = _locked_run(session, run_id)
+    run = locked_command(session, run_id)
     if run.status == ModeRunStatus.COMPLETED.value and run.assigned_device_id == device.id:
         return CommandResult(
             run=run,
             mode_runtime_state=run.mode.runtime_state,
             replayed=True,
         )
-    _require_active_assignment(run, device=device, now=now)
+    require_active_assignment(run, device=device, now=now)
     run.status = ModeRunStatus.COMPLETED.value
     run.completed_at = now
     run.lease_expires_at = None
@@ -111,14 +111,14 @@ def fail_command(
     max_attempts: int,
 ) -> CommandResult:
     _validate_positive("max_attempts", max_attempts)
-    run = _locked_run(session, run_id)
+    run = locked_command(session, run_id)
     if run.status == ModeRunStatus.FAILED.value and run.assigned_device_id == device.id:
         return CommandResult(
             run=run,
             mode_runtime_state=run.mode.runtime_state,
             replayed=True,
         )
-    _require_active_assignment(run, device=device, now=now)
+    require_active_assignment(run, device=device, now=now)
     run.error_message = error_message
 
     if retryable and run.attempt_count < max_attempts:
@@ -159,7 +159,7 @@ def requeue_expired_commands(
     return len(runs)
 
 
-def _locked_run(session: Session, run_id: UUID) -> ModeRun:
+def locked_command(session: Session, run_id: UUID) -> ModeRun:
     statement = select(ModeRun).where(ModeRun.id == run_id).with_for_update()
     run = session.scalar(statement)
     if run is None:
@@ -167,7 +167,7 @@ def _locked_run(session: Session, run_id: UUID) -> ModeRun:
     return run
 
 
-def _require_active_assignment(run: ModeRun, *, device: Device, now: datetime) -> None:
+def require_active_assignment(run: ModeRun, *, device: Device, now: datetime) -> None:
     if run.status != ModeRunStatus.PROCESSING.value or run.assigned_device_id != device.id:
         raise CommandConflict(f"Command '{run.id}' is not assigned to this device.")
     lease_expires_at = run.lease_expires_at

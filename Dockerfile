@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /service
 
-RUN addgroup --system homeagent && adduser --system --ingroup homeagent homeagent
+RUN addgroup --system homeagent && adduser --system --ingroup homeagent homeagent && \
+    mkdir -p /service/data/captures && chown -R homeagent:homeagent /service/data
 
 COPY pyproject.toml README.md ./
 COPY app ./app
