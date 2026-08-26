@@ -12,8 +12,8 @@
 | 프로젝트명 | HomeAgent |
 | 저장소 | `homeagent-backend`, `homeagent-web`, `homeagent-camera-agent` |
 | 최초 작성일 | 2026-08-14 |
-| 마지막 갱신일 | 2026-08-20 |
-| 현재 단계 | 백엔드 기본 골격 구현 완료, Docker 엔진 통합 검증 대기 |
+| 마지막 갱신일 | 2026-08-26 |
+| 현재 단계 | 백엔드 개발 환경 구성 완료, 청결 모드 데이터 모델 구현 대기 |
 | 최초 제공 모드 | 청결 모드(Cleanliness Mode) |
 | 기준 시간대 | Asia/Seoul |
 | 문서 담당 | 프로젝트 개발자 |
@@ -606,7 +606,7 @@ stateDiagram-v2
 | 단계 | 내용 | 상태 | 완료일 | 개발 코멘트 |
 |---:|---|---|---|---|
 | 0 | 요구사항 및 아키텍처 설계 | 🟢 완료 | 2026-08-14 | 최초 요구사항과 모드 기반 구조를 본 문서에 통합함 |
-| 1 | 저장소 및 개발 환경 구성 | 🟡 진행 중 | - | 코드·테스트 구성 완료, Docker 엔진 검증 대기 |
+| 1 | 저장소 및 개발 환경 구성 | 🟢 완료 | 2026-08-26 | Docker Compose 통합 검증까지 완료 |
 | 2 | 라즈베리파이 촬영 에이전트 | ⚪ 미진행 | - | - |
 | 3 | HomeAgent 서버 코어 | ⚪ 미진행 | - | - |
 | 4 | 청결 모드와 상태 머신 | ⚪ 미진행 | - | - |
@@ -637,7 +637,7 @@ stateDiagram-v2
 | 백엔드 Git 저장소 초기화 | 🟢 완료 | 원격 main 기준 브랜치와 README 생성 | 2026-08-19: `homeagent-backend` 최초 커밋 및 푸시 완료 |
 | 백엔드 애플리케이션 구조 생성 | 🟢 완료 | API, core, db, migrations, tests 책임 분리 | 2026-08-20: FastAPI 패키지 구조 생성 |
 | 환경 변수 예시 작성 | 🟢 완료 | 비밀값 없이 `.env.example` 제공 | DB 주소·로그·연결 제한 시간 제공 |
-| Docker Compose 작성 | 🟡 진행 중 | API와 PostgreSQL이 한 명령으로 실행 | 구문 검증 완료, Docker Desktop 엔진 API 500으로 실제 실행 대기 |
+| Docker Compose 작성 | 🟢 완료 | API와 PostgreSQL이 한 명령으로 실행 | 2026-08-26: 이미지 빌드, DB healthcheck와 API 기동 확인 |
 | Alembic 마이그레이션 구성 | 🟢 완료 | 기준 migration과 head 조회 성공 | `20260820_0001` 기준선 생성 |
 | 코드 품질 도구 설정 | 🟢 완료 | formatter, linter, type checker 실행 가능 | Ruff와 strict mypy 통과 |
 | 테스트 실행 환경 구성 | 🟢 완료 | 기본 테스트 명령 성공 | 6개 통과, 커버리지 94.81% |
@@ -879,9 +879,25 @@ MVP 안정화 후 진행한다.
 - 다음 작업자에게 남기는 코멘트:
 ```
 
+### 2026-08-26 - Docker WSL 2 복구 및 통합 검증
+
+- 상태: 🟢 완료
+- 관련 단계: 단계 1
+- 관련 요구사항: NFR-002, NFR-006
+- 작업 목적: Docker Desktop Linux 엔진 오류를 해소하고 실제 PostgreSQL 기반으로 백엔드 실행을 검증한다.
+- 구현 내용: Windows Virtual Machine Platform과 WSL 2 하이퍼바이저를 활성화하고 재부팅 후 Docker Desktop WSL 2 백엔드를 확인했다. Docker Compose로 API와 PostgreSQL을 빌드·실행했다.
+- 주요 변경 파일:
+  - `PROJECT_PLAN.md`
+- 구현 중 결정한 사항: Windows Home에서는 Hyper-V 전체 역할 대신 WSL 2와 Virtual Machine Platform을 사용한다.
+- 테스트 방법: Windows hypervisor, WSL 배포판, Docker Server, Compose 컨테이너, Alembic, PostgreSQL 쿼리와 HTTP 상태 API를 확인했다.
+- 테스트 결과: `HyperVisorPresent=True`, `docker-desktop Running/WSL 2`, PostgreSQL healthy, migration `20260820_0001 (head)`, DB `SELECT 1` 성공, `/health/live`와 `/health/ready` 200 확인.
+- 남은 작업: 청결 모드 데이터 모델과 상태 전이 규칙 구현.
+- 알려진 문제: 없음.
+- 다음 작업자에게 남기는 코멘트: 단계 1이 완료됐으므로 다음 브랜치에서 청결 모드 도메인 모델부터 구현한다.
+
 ### 2026-08-20 - 백엔드 기본 골격 구현
 
-- 상태: 🟡 진행 중
+- 상태: 🟢 완료
 - 관련 단계: 단계 1
 - 관련 요구사항: NFR-002, NFR-003, NFR-006, NFR-007
 - 작업 목적: 청결 모드 개발 전에 반복 실행·검증 가능한 FastAPI와 PostgreSQL 기반을 준비한다.
@@ -899,9 +915,9 @@ MVP 안정화 후 진행한다.
 - 구현 중 결정한 사항: 초기에는 동기 SQLAlchemy를 사용한다. `/live`는 앱 프로세스만, `/ready`와 `/health`는 DB까지 검사한다. 테스트 커버리지 하한은 80%로 설정한다.
 - 테스트 방법: Ruff 검사·포맷, strict mypy, pytest, compileall, Alembic head, Compose 구문, 실제 Uvicorn HTTP 응답을 확인했다.
 - 테스트 결과: 테스트 6개 통과, 커버리지 94.81%, Ruff·mypy 통과, Alembic head `20260820_0001` 확인, `/live` 200과 DB 미연결 시 `/ready` 503 확인.
-- 남은 작업: Docker Desktop Linux 엔진을 정상화한 뒤 PostgreSQL 컨테이너, migration과 `/ready` 200 통합 검증.
-- 알려진 문제: 현재 Docker Desktop Linux 엔진이 Docker API 요청에 500 오류를 반환한다.
-- 다음 작업자에게 남기는 코멘트: Docker 엔진 정상화 후 `docker compose up --build`를 실행하고 준비 상태 API가 200인지 확인한 뒤 단계 1을 완료 처리한다.
+- 남은 작업: 청결 모드 데이터 모델과 상태 전이 규칙 구현.
+- 알려진 문제: Docker Desktop Linux 엔진 오류는 2026-08-26 해결됨.
+- 다음 작업자에게 남기는 코멘트: `/live`와 `/ready`의 역할을 유지하고 신규 DB 테이블은 Alembic migration으로 추가한다.
 
 ### 2026-08-19 - 백엔드 저장소 초기화 및 Git 정책 확정
 
@@ -947,7 +963,7 @@ MVP 안정화 후 진행한다.
 | RISK-003 | 2026-08-14 | 외부 모델 가격·성능·API가 변경될 수 있음 | 비용과 유지보수 | 제공자 인터페이스로 종속성 분리 | 열림 |
 | RISK-004 | 2026-08-14 | 한 대의 고정 카메라에 사각지대가 생길 수 있음 | 청결 판정 누락 | 설치 전 화각 검증, 필요 시 복수 카메라 | 열림 |
 | RISK-005 | 2026-08-14 | 개인의 청결 기준이 모델 기준과 다를 수 있음 | 사용자 불만 | 사용자 피드백과 임계값·프롬프트 조정 | 열림 |
-| ISSUE-001 | 2026-08-20 | Docker Desktop Linux 엔진이 API 500 오류 반환 | 컨테이너 통합 테스트 대기 | Docker Desktop 엔진 정상화 후 Compose 재검증 | 열림 |
+| ISSUE-001 | 2026-08-20 | Docker Desktop Linux 엔진이 API 500 오류 반환 | 컨테이너 통합 테스트 대기 | Virtual Machine Platform 활성화와 재부팅 후 Compose 재검증 | 2026-08-26 해결 |
 
 새 기록 양식:
 
@@ -973,14 +989,14 @@ MVP 안정화 후 진행한다.
 
 ## 19. 다음 작업
 
-현재 바로 진행할 작업은 Docker Desktop 엔진을 정상화해 `단계 1. 저장소 및 개발 환경 구성`의 통합 검증을 완료하는 것이다. 이후 `단계 4. 청결 모드와 상태 머신`의 데이터 모델부터 구현한다.
+현재 바로 진행할 작업은 `단계 4. 청결 모드와 상태 머신`의 데이터 모델과 상태 전이 규칙을 구현하는 것이다.
 
 권장 순서:
 
-1. Docker Desktop Linux 엔진 상태 복구
-2. PostgreSQL 컨테이너와 Alembic migration 실행 확인
-3. `/api/v1/health/ready` 200 응답 확인
-4. 청결 모드 테이블과 상태 전이 규칙 구현
+1. 청결 모드와 상태 이력 테이블 설계
+2. Alembic migration 작성
+3. 허용·거부 상태 전이 규칙 구현
+4. 모드 활성·비활성 API 구현
 5. 가짜 분석 결과를 이용한 청결·더러움·재검사 흐름 구현
 6. 이후 장치 등록과 heartbeat API 구현
 
