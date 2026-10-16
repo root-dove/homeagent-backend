@@ -1,8 +1,10 @@
+import base64
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from google.genai import errors, types
+from google.genai import errors
 from PIL import Image
 
 from app.vision.gemini_analyzer import (
@@ -14,32 +16,32 @@ from app.vision.gemini_analyzer import (
 from app.vision.schemas import CleanlinessVisionResult, ImageQuality
 
 
-class FakeModels:
+class FakeInteractions:
     def __init__(self, output: dict[str, object] | None) -> None:
         self.output = output
         self.arguments: dict[str, object] | None = None
 
-    def generate_content(self, **kwargs: object) -> object:
+    def create(self, **kwargs: object) -> object:
         self.arguments = kwargs
         return SimpleNamespace(
-            response_id="response_test_cleanliness",
-            model_version="gemini-test-vision-001",
-            parsed=self.output,
-            usage_metadata=SimpleNamespace(
-                prompt_token_count=123,
-                candidates_token_count=45,
-                total_token_count=168,
+            id="interaction_test_cleanliness",
+            model="gemini-test-vision-001",
+            output_text=json.dumps(self.output) if self.output is not None else None,
+            usage=SimpleNamespace(
+                total_input_tokens=123,
+                total_output_tokens=45,
+                total_tokens=168,
             ),
         )
 
 
 class FakeGemini:
     def __init__(self, output: dict[str, object] | None) -> None:
-        self.models = FakeModels(output)
+        self.interactions = FakeInteractions(output)
 
 
-class RejectingModels:
-    def generate_content(self, **kwargs: object) -> object:
+class RejectingInteractions:
+    def create(self, **kwargs: object) -> object:
         raise errors.ClientError(
             404,
             {
@@ -53,7 +55,7 @@ class RejectingModels:
 
 class RejectingGemini:
     def __init__(self) -> None:
-        self.models = RejectingModels()
+        self.interactions = RejectingInteractions()
 
 
 def cleanliness_payload() -> dict[str, object]:
@@ -97,28 +99,28 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
     assert analysis.result.overall_score == 42
     assert analysis.metadata.model == "gemini-test-vision"
     assert analysis.metadata.model_version == "gemini-test-vision-001"
-    assert analysis.metadata.response_id == "response_test_cleanliness"
+    assert analysis.metadata.response_id == "interaction_test_cleanliness"
     assert analysis.metadata.input_tokens == 123
     assert analysis.metadata.output_tokens == 45
     assert analysis.metadata.total_tokens == 168
 
-    assert client.models.arguments is not None
-    contents = client.models.arguments["contents"]
-    assert isinstance(contents, types.Content)
-    assert contents.parts is not None
-    image_part = contents.parts[0]
-    assert isinstance(image_part, types.Part)
-    assert image_part.inline_data is not None
-    assert image_part.inline_data.mime_type == "image/jpeg"
-    assert image_part.inline_data.data == image_path.read_bytes()
+    assert client.interactions.arguments is not None
+    request_input = client.interactions.arguments["input"]
+    assert isinstance(request_input, list)
+    assert request_input[0]["type"] == "text"  # type: ignore[index]
+    image_input = request_input[1]
+    assert image_input["type"] == "image"  # type: ignore[index]
+    assert image_input["mime_type"] == "image/jpeg"  # type: ignore[index]
+    assert image_input["resolution"] == "high"  # type: ignore[index]
+    assert base64.b64decode(image_input["data"]) == image_path.read_bytes()  # type: ignore[index]
 
-    config = client.models.arguments["config"]
-    assert isinstance(config, types.GenerateContentConfig)
-    assert config.response_mime_type == "application/json"
-    assert config.response_schema is None
-    assert config.response_json_schema == CleanlinessVisionResult.model_json_schema()
-    assert config.response_json_schema["additionalProperties"] is False
-    assert config.media_resolution is types.MediaResolution.MEDIA_RESOLUTION_HIGH
+    response_format = client.interactions.arguments["response_format"]
+    assert isinstance(response_format, dict)
+    assert response_format["type"] == "text"
+    assert response_format["mime_type"] == "application/json"
+    schema = response_format["schema"]
+    assert schema == CleanlinessVisionResult.model_json_schema()
+    assert schema["additionalProperties"] is False
 
 
 def test_analyzer_rejects_missing_structured_output(tmp_path: Path) -> None:

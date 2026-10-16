@@ -1,10 +1,11 @@
+import base64
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from google import genai
-from google.genai import errors, types
+from google.genai import errors, interactions, types
 from PIL import Image, UnidentifiedImageError
 
 from app.vision.prompt import CLEANLINESS_ANALYSIS_INSTRUCTIONS, CLEANLINESS_ANALYSIS_REQUEST
@@ -70,46 +71,45 @@ class GeminiImageAnalyzer:
         media_resolution: MediaResolution = "high",
     ) -> GeminiAnalysis:
         image_bytes, media_type = _image_bytes_and_media_type(image_path)
-        resolution = {
-            "low": types.MediaResolution.MEDIA_RESOLUTION_LOW,
-            "medium": types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-            "high": types.MediaResolution.MEDIA_RESOLUTION_HIGH,
-        }[media_resolution]
-        contents = types.Content(
-            role="user",
-            parts=[
-                types.Part.from_bytes(data=image_bytes, mime_type=media_type),
-                types.Part.from_text(text=CLEANLINESS_ANALYSIS_REQUEST),
-            ],
-        )
+        encoded_image = base64.b64encode(image_bytes).decode("ascii")
         try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=contents,
-                config=types.GenerateContentConfig(
+            response = cast(
+                interactions.Interaction,
+                self._client.interactions.create(
+                    model=self._model,
+                    input=[
+                        {"type": "text", "text": CLEANLINESS_ANALYSIS_REQUEST},
+                        {
+                            "type": "image",
+                            "data": encoded_image,
+                            "mime_type": media_type,
+                            "resolution": media_resolution,
+                        },
+                    ],
                     system_instruction=CLEANLINESS_ANALYSIS_INSTRUCTIONS,
-                    response_mime_type="application/json",
-                    response_json_schema=CleanlinessVisionResult.model_json_schema(),
-                    media_resolution=resolution,
-                    temperature=0.1,
+                    response_format={
+                        "type": "text",
+                        "mime_type": "application/json",
+                        "schema": CleanlinessVisionResult.model_json_schema(),
+                    },
                 ),
             )
         except errors.APIError as error:
             raise VisionAnalysisError(_safe_api_error(error)) from error
 
-        if response.parsed is None:
+        if not response.output_text:
             raise VisionAnalysisError("Gemini returned no structured cleanliness result.")
-        result = CleanlinessVisionResult.model_validate(response.parsed)
-        usage = response.usage_metadata
+        result = CleanlinessVisionResult.model_validate_json(response.output_text)
+        usage = response.usage
         return GeminiAnalysis(
             result=result,
             metadata=GeminiAnalysisMetadata(
                 model=self._model,
-                model_version=response.model_version,
-                response_id=response.response_id,
-                input_tokens=usage.prompt_token_count if usage is not None else None,
-                output_tokens=usage.candidates_token_count if usage is not None else None,
-                total_tokens=usage.total_token_count if usage is not None else None,
+                model_version=str(response.model) if response.model is not None else None,
+                response_id=response.id,
+                input_tokens=usage.total_input_tokens if usage is not None else None,
+                output_tokens=usage.total_output_tokens if usage is not None else None,
+                total_tokens=usage.total_tokens if usage is not None else None,
             ),
         )
 
