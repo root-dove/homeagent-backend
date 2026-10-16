@@ -89,7 +89,7 @@ class GeminiImageAnalyzer:
                 config=types.GenerateContentConfig(
                     system_instruction=CLEANLINESS_ANALYSIS_INSTRUCTIONS,
                     response_mime_type="application/json",
-                    response_schema=CleanlinessVisionResult,
+                    response_json_schema=CleanlinessVisionResult.model_json_schema(),
                     media_resolution=resolution,
                     temperature=0.1,
                 ),

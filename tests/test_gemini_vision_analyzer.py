@@ -115,7 +115,9 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
     config = client.models.arguments["config"]
     assert isinstance(config, types.GenerateContentConfig)
     assert config.response_mime_type == "application/json"
-    assert config.response_schema is CleanlinessVisionResult
+    assert config.response_schema is None
+    assert config.response_json_schema == CleanlinessVisionResult.model_json_schema()
+    assert config.response_json_schema["additionalProperties"] is False
     assert config.media_resolution is types.MediaResolution.MEDIA_RESOLUTION_HIGH
 
 
