@@ -64,13 +64,18 @@ def test_cli_prints_json_without_exposing_api_key(
                 image=image_path,
                 model="gemini-test-vision",
                 media_resolution="high",
+                timeout_seconds=240,
             )
         ),
     )
 
     class FakeAnalyzer:
         def __init__(self, **kwargs: object) -> None:
-            assert kwargs == {"api_key": "secret-key", "model": "gemini-test-vision"}
+            assert kwargs == {
+                "api_key": "secret-key",
+                "model": "gemini-test-vision",
+                "timeout_seconds": 240,
+            }
 
         def analyze(self, supplied_path: Path, **kwargs: object) -> GeminiAnalysis:
             assert supplied_path == image_path

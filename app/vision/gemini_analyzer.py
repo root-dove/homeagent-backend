@@ -43,7 +43,7 @@ class GeminiImageAnalyzer:
         *,
         api_key: str,
         model: str = "gemini-3.8-flash",
-        timeout_seconds: float = 60,
+        timeout_seconds: float = 180,
         max_retries: int = 2,
         client: genai.Client | None = None,
     ) -> None:
@@ -56,6 +56,7 @@ class GeminiImageAnalyzer:
         if max_retries < 0:
             raise ValueError("Max retries must not be negative.")
         self._model = model
+        self._timeout_seconds = timeout_seconds
         self._client = client or genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
@@ -92,10 +93,17 @@ class GeminiImageAnalyzer:
                         "mime_type": "application/json",
                         "schema": CleanlinessVisionResult.model_json_schema(),
                     },
+                    timeout=self._timeout_seconds,
                 ),
             )
-        except errors.APIError as error:
-            raise VisionAnalysisError(_safe_api_error(error)) from error
+        except Exception as error:
+            if isinstance(error, errors.APIError):
+                raise VisionAnalysisError(_safe_api_error(error)) from error
+            if type(error).__name__ == "APITimeoutError":
+                raise VisionAnalysisError(
+                    f"Gemini vision request timed out after {self._timeout_seconds:g} seconds."
+                ) from error
+            raise
 
         if not response.output_text:
             raise VisionAnalysisError("Gemini returned no structured cleanliness result.")

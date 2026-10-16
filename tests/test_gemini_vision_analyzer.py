@@ -58,6 +58,20 @@ class RejectingGemini:
         self.interactions = RejectingInteractions()
 
 
+class APITimeoutError(Exception):
+    pass
+
+
+class TimingOutInteractions:
+    def create(self, **kwargs: object) -> object:
+        raise APITimeoutError("Request timed out with internal request details")
+
+
+class TimingOutGemini:
+    def __init__(self) -> None:
+        self.interactions = TimingOutInteractions()
+
+
 def cleanliness_payload() -> dict[str, object]:
     return {
         "image_quality": "usable",
@@ -121,6 +135,7 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
     schema = response_format["schema"]
     assert schema == CleanlinessVisionResult.model_json_schema()
     assert schema["additionalProperties"] is False
+    assert client.interactions.arguments["timeout"] == 180
 
 
 def test_analyzer_rejects_missing_structured_output(tmp_path: Path) -> None:
@@ -151,6 +166,21 @@ def test_analyzer_reports_safe_api_error_without_exposing_key(tmp_path: Path) ->
     assert "gemini-missing" in message
     assert "AIzaTESTSECRET" not in message
     assert "[REDACTED]" in message
+
+
+def test_analyzer_reports_timeout_without_traceback_details(tmp_path: Path) -> None:
+    image_path = tmp_path / "room.jpg"
+    save_image(image_path)
+    analyzer = GeminiImageAnalyzer(
+        api_key="test-key",
+        timeout_seconds=240,
+        client=TimingOutGemini(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(VisionAnalysisError) as captured:
+        analyzer.analyze(image_path)
+
+    assert str(captured.value) == "Gemini vision request timed out after 240 seconds."
 
 
 def test_image_bytes_use_detected_format_not_extension(tmp_path: Path) -> None:

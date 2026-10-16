@@ -28,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="high",
         help="Gemini image processing resolution (default: high)",
     )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=180,
+        help="Gemini request timeout in seconds (default: 180)",
+    )
     return parser
 
 
@@ -39,7 +45,11 @@ def main() -> None:
         raise SystemExit(2)
 
     try:
-        analysis = GeminiImageAnalyzer(api_key=api_key, model=args.model).analyze(
+        analysis = GeminiImageAnalyzer(
+            api_key=api_key,
+            model=args.model,
+            timeout_seconds=args.timeout_seconds,
+        ).analyze(
             args.image,
             media_resolution=cast(MediaResolution, args.media_resolution),
         )
