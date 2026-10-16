@@ -1,36 +1,41 @@
-import base64
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from google.genai import types
 from PIL import Image
 
-from app.vision.openai_analyzer import (
+from app.vision.gemini_analyzer import (
     MAX_IMAGE_BYTES,
-    OpenAIImageAnalyzer,
+    GeminiImageAnalyzer,
     VisionAnalysisError,
-    _image_data_url,
+    _image_bytes_and_media_type,
 )
 from app.vision.schemas import CleanlinessVisionResult, ImageQuality
 
 
-class FakeResponses:
+class FakeModels:
     def __init__(self, output: dict[str, object] | None) -> None:
         self.output = output
         self.arguments: dict[str, object] | None = None
 
-    def parse(self, **kwargs: object) -> object:
+    def generate_content(self, **kwargs: object) -> object:
         self.arguments = kwargs
         return SimpleNamespace(
-            id="resp_test_cleanliness",
-            output_parsed=self.output,
-            usage=SimpleNamespace(input_tokens=123, output_tokens=45),
+            response_id="response_test_cleanliness",
+            model_version="gemini-test-vision-001",
+            parsed=self.output,
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=123,
+                candidates_token_count=45,
+                total_token_count=168,
+            ),
         )
 
 
-class FakeOpenAI:
+class FakeGemini:
     def __init__(self, output: dict[str, object] | None) -> None:
-        self.responses = FakeResponses(output)
+        self.models = FakeModels(output)
 
 
 def cleanliness_payload() -> dict[str, object]:
@@ -57,55 +62,65 @@ def save_image(path: Path, *, image_format: str = "JPEG") -> None:
     Image.new("RGB", (1280, 720), color=(120, 100, 80)).save(path, format=image_format)
 
 
-def test_analyzer_sends_data_url_and_returns_typed_result(tmp_path: Path) -> None:
+def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> None:
     image_path = tmp_path / "room.jpg"
     save_image(image_path)
-    client = FakeOpenAI(cleanliness_payload())
-    analyzer = OpenAIImageAnalyzer(
+    client = FakeGemini(cleanliness_payload())
+    analyzer = GeminiImageAnalyzer(
         api_key="test-key",
-        model="gpt-test-vision",
+        model="gemini-test-vision",
         client=client,  # type: ignore[arg-type]
     )
 
-    analysis = analyzer.analyze(image_path, detail="high")
+    analysis = analyzer.analyze(image_path, media_resolution="high")
 
     assert isinstance(analysis.result, CleanlinessVisionResult)
     assert analysis.result.image_quality is ImageQuality.USABLE
     assert analysis.result.overall_score == 42
-    assert analysis.metadata.model == "gpt-test-vision"
-    assert analysis.metadata.response_id == "resp_test_cleanliness"
+    assert analysis.metadata.model == "gemini-test-vision"
+    assert analysis.metadata.model_version == "gemini-test-vision-001"
+    assert analysis.metadata.response_id == "response_test_cleanliness"
     assert analysis.metadata.input_tokens == 123
     assert analysis.metadata.output_tokens == 45
+    assert analysis.metadata.total_tokens == 168
 
-    assert client.responses.arguments is not None
-    request_input = client.responses.arguments["input"]
-    assert isinstance(request_input, list)
-    image_content = request_input[0]["content"][1]  # type: ignore[index]
-    assert image_content["detail"] == "high"  # type: ignore[index]
-    assert str(image_content["image_url"]).startswith("data:image/jpeg;base64,")  # type: ignore[index]
+    assert client.models.arguments is not None
+    contents = client.models.arguments["contents"]
+    assert isinstance(contents, types.Content)
+    assert contents.parts is not None
+    image_part = contents.parts[0]
+    assert isinstance(image_part, types.Part)
+    assert image_part.inline_data is not None
+    assert image_part.inline_data.mime_type == "image/jpeg"
+    assert image_part.inline_data.data == image_path.read_bytes()
+
+    config = client.models.arguments["config"]
+    assert isinstance(config, types.GenerateContentConfig)
+    assert config.response_mime_type == "application/json"
+    assert config.response_schema is CleanlinessVisionResult
+    assert config.media_resolution is types.MediaResolution.MEDIA_RESOLUTION_HIGH
 
 
 def test_analyzer_rejects_missing_structured_output(tmp_path: Path) -> None:
     image_path = tmp_path / "room.png"
     save_image(image_path, image_format="PNG")
-    analyzer = OpenAIImageAnalyzer(
+    analyzer = GeminiImageAnalyzer(
         api_key="test-key",
-        client=FakeOpenAI(None),  # type: ignore[arg-type]
+        client=FakeGemini(None),  # type: ignore[arg-type]
     )
 
     with pytest.raises(VisionAnalysisError, match="no structured"):
         analyzer.analyze(image_path)
 
 
-def test_image_data_url_uses_detected_format_not_extension(tmp_path: Path) -> None:
+def test_image_bytes_use_detected_format_not_extension(tmp_path: Path) -> None:
     image_path = tmp_path / "misleading.jpg"
     save_image(image_path, image_format="PNG")
 
-    data_url = _image_data_url(image_path)
-    prefix, encoded = data_url.split(",", maxsplit=1)
+    image_bytes, media_type = _image_bytes_and_media_type(image_path)
 
-    assert prefix == "data:image/png;base64"
-    assert base64.b64decode(encoded) == image_path.read_bytes()
+    assert media_type == "image/png"
+    assert image_bytes == image_path.read_bytes()
 
 
 @pytest.mark.parametrize(
@@ -125,7 +140,7 @@ def test_image_validation_rejects_invalid_files(
     image_path.write_bytes(content)
 
     with pytest.raises(VisionAnalysisError, match=message):
-        _image_data_url(image_path)
+        _image_bytes_and_media_type(image_path)
 
 
 def test_image_validation_rejects_oversized_file(
@@ -141,4 +156,4 @@ def test_image_validation_rejects_oversized_file(
         lambda self: SimpleNamespace(st_size=MAX_IMAGE_BYTES + 1),
     )
     with pytest.raises(VisionAnalysisError, match="exceeds"):
-        _image_data_url(image_path)
+        _image_bytes_and_media_type(image_path)
