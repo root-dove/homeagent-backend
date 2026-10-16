@@ -1,0 +1,62 @@
+{
+  "result": {
+    "image_quality": "usable",
+    "quality_issues": [],
+    "classification": "dirty",
+    "confidence": 0.92,
+    "overall_score": 56,
+    "summary": "책상 위에 전선, 헤드폰, 음료 컵, 가방 등 다양한 소지품이 어지럽게 널려 있고 구석과 선쌓여 있어 전반쌓쌓여쌓여 있어 전반적인 정돈이 필요합니다.",
+    "areas": [
+      {
+        "area": "desk",
+        "cleanliness_score": 48,
+        "status": "dirty",
+        "issues": [
+          "책상 위에 놓인 일회용 음료 컵 치우기",
+          "어지럽게 늘어진 전선 및 케이블 정리하기",
+          "헤드폰, 노트북 주변 소지품 및 필기도구 정돈하기",
+          "책상과 의자에 걸쳐진 가방 및 옷가지 정리하기"
+        ],
+        "evidence": [
+          "중앙 테이블 위에 테이크아웃 음료 컵과 빨대가 놓여 있음",
+          "헤드폰, 가방, 외투 등이 작업 공간에 널려 있음",
+          "모니터와 노트북 사이로 각종 연결 케이블이 정리되지 않은 채 엉켜 있음",
+          "책상 상판 곳곳에 작은 소품과 종이류가 흩어져 있음"
+        ]
+      },
+      {
+        "area": "floor",
+        "cleanliness_score": 74,
+        "status": "clean",
+        "issues": [
+          "의자를 책상 안쪽으로 밀어 넣어 통로 확보하기"
+        ],
+        "evidence": [
+          "바닥 통로에 큰 쓰레기는 없으나 다수의 의자가 불규칙하게 배치되어 있음",
+          "사람이 지나다닐 수 있는 통로는 대체로 확보되어 있음"
+        ]
+      },
+      {
+        "area": "storage",
+        "cleanliness_score": 55,
+        "status": "uncertain",
+        "issues": [
+          "창가 선반 위에 쌓인 비닐봉지와 잡화 정리하기",
+          "벽 쪽에 세워진 접이식 테이블과 짐 보따리 정돈하기"
+        ],
+        "evidence": [
+          "창가 쪽 수납장 및 선반 위에 비닐봉지와 물품들이 무질서하게 적재되어 있음",
+          "벽면에 파란색 접이식 테이블과 큰 짐 자루가 기대어 세워져 있음"
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "model": "gemini-3.8-flash",
+    "model_version": "gemini-3.8-flash",
+    "response_id": "v1_ChdZYXpSYXZhU05wWHVyZmNQbl9uYW1RTRIXWWF6UmF2YVNOcFh1cmZjUG5fbmFtUU0",
+    "input_tokens": 1572,
+    "output_tokens": 598,
+    "total_tokens": 3100
+  }
+}
