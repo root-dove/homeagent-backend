@@ -41,7 +41,7 @@ class GeminiImageAnalyzer:
         self,
         *,
         api_key: str,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.8-flash",
         timeout_seconds: float = 60,
         max_retries: int = 2,
         client: genai.Client | None = None,
