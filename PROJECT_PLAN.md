@@ -922,7 +922,7 @@ MVP 안정화 후 진행한다.
 - 관련 단계: 단계 5
 - 관련 요구사항: FR-003, FR-004, FR-005, NFR-001, NFR-002
 - 작업 목적: 카메라와 전체 파이프라인을 연결하기 전에 Windows의 사진 한 장으로 외부 VLM의 전체·침대·책상·바닥 청결도 판정을 검증한다.
-- 구현 내용: Gemini 3.8 Interactions API에 Base64 인라인 이미지와 청결도 평가 프롬프트를 전달하고 최상위 `response_format`의 Pydantic JSON Schema로 사진 품질, 전체 판정·점수·신뢰도, 보이는 영역별 점수·문제·관찰 근거를 받는 분석기와 CLI를 구현했다. JPEG·PNG·WebP 디코딩, 실제 포맷 탐지, 15MB 제한, 이미지별 처리 해상도, timeout·재시도와 토큰 메타데이터도 추가했다.
+- 구현 내용: Gemini 3.8 Interactions API에 Base64 인라인 이미지와 청결도 평가 프롬프트를 전달하고 최상위 `response_format`의 호환성 높은 평탄한 JSON Schema로 사진 품질, 전체 판정·점수·신뢰도, 보이는 영역별 점수·문제·관찰 근거를 받는 분석기와 CLI를 구현했다. JPEG·PNG·WebP 디코딩, 실제 포맷 탐지, 15MB 제한, timeout·재시도와 토큰 메타데이터도 추가했다.
 - 주요 변경 파일:
   - `app/vision/schemas.py`
   - `app/vision/prompt.py`
@@ -931,8 +931,8 @@ MVP 안정화 후 진행한다.
   - `tests/test_gemini_vision_analyzer.py`
   - `tests/test_analyze_image_cli.py`
 - 구현 중 결정한 사항: 우선 독립 CLI로 모델 판정 품질을 확인하고 결과가 만족스러울 때 capture·분석 DB·상태 머신에 연결한다. 보이지 않는 영역을 추측하지 않고, 세균 등 사진으로 판단할 수 없는 위생 상태 대신 정돈 상태만 평가한다. API 키는 환경 변수로만 읽으며 출력하지 않는다. 신규 사용자에게 종료된 Gemini 2.5와 3.8의 구형 Generate Content 요청을 사용하지 않고, Gemini 3.8의 현재 Interactions API 계약을 따른다.
-- 테스트 방법: 가짜 Gemini 응답으로 요청 이미지·처리 해상도·구조화 결과·사용량을 검증하고, 빈 파일·손상 이미지·확장자 불일치·용량 초과·키 누락·키 비노출을 테스트했다. Ruff·포맷·strict mypy와 전체 pytest를 실행했다.
-- 테스트 결과: 자동 테스트 127개 통과, 전체 커버리지 95.00%. 실제 사진 요청이 Gemini Interactions API까지 도달했으며 60초 timeout을 확인해 기본값을 180초로 조정했다. 최종 분석 결과 수신은 재호출로 확인한다.
+- 테스트 방법: 가짜 Gemini 응답으로 Base64 요청 이미지·최소 구조화 스키마·결과·사용량을 검증하고, 빈 파일·손상 이미지·확장자 불일치·용량 초과·키 누락·키 비노출을 테스트했다. Ruff·포맷·strict mypy와 전체 pytest를 실행했다.
+- 테스트 결과: 자동 테스트 127개 통과, 전체 커버리지 94.88%. 실제 사진 요청이 Gemini Interactions API까지 도달했다. 60초 timeout과 선택 옵션을 포함한 요청의 일반 `invalid_request`를 확인해 기본 timeout을 180초로 조정하고 요청을 공식 최소 형식으로 단순화했다. 최종 분석 결과 수신은 재호출로 확인한다.
 - 남은 작업: 실제 방 사진으로 최초 호출, 결과 검토와 프롬프트·임계값 조정, capture 작업과 분석 결과 DB 저장 연결이 필요하다.
 - 알려진 문제: 사진이 외부 서비스로 전송되고 모델 사용 비용이 발생할 수 있다. `gemini-2.5-flash`는 신규 사용자에게 제공되지 않아 `gemini-3.8-flash`를 기본값으로 사용하고, API 오류의 HTTP 코드·상태·안전한 메시지를 출력한다.
 - 다음 작업자에게 남기는 코멘트: `GEMINI_API_KEY`를 채팅이나 저장소에 남기지 말고 PowerShell 환경 변수로만 설정한 뒤 `python -m app.cli.analyze_image`를 실행한다. 실제 평가 전 얼굴·문서·모니터 등 민감 정보가 없는 사진부터 사용한다.

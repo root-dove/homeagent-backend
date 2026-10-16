@@ -63,7 +63,6 @@ def test_cli_prints_json_without_exposing_api_key(
             parse_args=lambda: SimpleNamespace(
                 image=image_path,
                 model="gemini-test-vision",
-                media_resolution="high",
                 timeout_seconds=240,
             )
         ),
@@ -79,7 +78,7 @@ def test_cli_prints_json_without_exposing_api_key(
 
         def analyze(self, supplied_path: Path, **kwargs: object) -> GeminiAnalysis:
             assert supplied_path == image_path
-            assert kwargs == {"media_resolution": "high"}
+            assert kwargs == {}
             return GeminiAnalysis(
                 result=result(),
                 metadata=GeminiAnalysisMetadata(

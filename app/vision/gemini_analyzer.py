@@ -2,7 +2,7 @@ import base64
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from google import genai
 from google.genai import errors, interactions, types
@@ -13,7 +13,6 @@ from app.vision.schemas import CleanlinessVisionResult
 
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
 SUPPORTED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
-MediaResolution = Literal["low", "medium", "high"]
 GEMINI_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z_-]+")
 
 
@@ -68,30 +67,27 @@ class GeminiImageAnalyzer:
     def analyze(
         self,
         image_path: Path,
-        *,
-        media_resolution: MediaResolution = "high",
     ) -> GeminiAnalysis:
         image_bytes, media_type = _image_bytes_and_media_type(image_path)
         encoded_image = base64.b64encode(image_bytes).decode("ascii")
+        prompt = f"{CLEANLINESS_ANALYSIS_INSTRUCTIONS}\n\n{CLEANLINESS_ANALYSIS_REQUEST}"
         try:
             response = cast(
                 interactions.Interaction,
                 self._client.interactions.create(
                     model=self._model,
                     input=[
-                        {"type": "text", "text": CLEANLINESS_ANALYSIS_REQUEST},
+                        {"type": "text", "text": prompt},
                         {
                             "type": "image",
                             "data": encoded_image,
                             "mime_type": media_type,
-                            "resolution": media_resolution,
                         },
                     ],
-                    system_instruction=CLEANLINESS_ANALYSIS_INSTRUCTIONS,
                     response_format={
                         "type": "text",
                         "mime_type": "application/json",
-                        "schema": CleanlinessVisionResult.model_json_schema(),
+                        "schema": _gemini_response_schema(),
                     },
                     timeout=self._timeout_seconds,
                 ),
@@ -102,6 +98,11 @@ class GeminiImageAnalyzer:
             if type(error).__name__ == "APITimeoutError":
                 raise VisionAnalysisError(
                     f"Gemini vision request timed out after {self._timeout_seconds:g} seconds."
+                ) from error
+            if type(error).__module__.startswith("google.genai._gaos"):
+                safe_message = GEMINI_KEY_PATTERN.sub("[REDACTED]", str(error))[:1000]
+                raise VisionAnalysisError(
+                    f"Gemini vision request failed: {safe_message}"
                 ) from error
             raise
 
@@ -156,3 +157,42 @@ def _safe_api_error(error: errors.APIError) -> str:
     message = getattr(error, "message", "Request was rejected.") or "Request was rejected."
     safe_message = GEMINI_KEY_PATTERN.sub("[REDACTED]", str(message))
     return f"Gemini vision request failed: HTTP {code} {status}: {safe_message}"
+
+
+def _gemini_response_schema() -> dict[str, object]:
+    classification = ["clean", "uncertain", "dirty"]
+    area_schema = {
+        "type": "object",
+        "properties": {
+            "area": {"type": "string"},
+            "cleanliness_score": {"type": "integer"},
+            "status": {"type": "string", "enum": classification},
+            "issues": {"type": "array", "items": {"type": "string"}},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["area", "cleanliness_score", "status", "issues", "evidence"],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "image_quality": {
+                "type": "string",
+                "enum": ["usable", "too_dark", "blurry", "obstructed", "insufficient_view"],
+            },
+            "quality_issues": {"type": "array", "items": {"type": "string"}},
+            "classification": {"type": "string", "enum": classification},
+            "confidence": {"type": "number"},
+            "overall_score": {"type": "integer"},
+            "summary": {"type": "string"},
+            "areas": {"type": "array", "items": area_schema},
+        },
+        "required": [
+            "image_quality",
+            "quality_issues",
+            "classification",
+            "confidence",
+            "overall_score",
+            "summary",
+            "areas",
+        ],
+    }

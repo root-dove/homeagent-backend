@@ -3,13 +3,8 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import cast
 
-from app.vision.gemini_analyzer import (
-    GeminiImageAnalyzer,
-    MediaResolution,
-    VisionAnalysisError,
-)
+from app.vision.gemini_analyzer import GeminiImageAnalyzer, VisionAnalysisError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,12 +16,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default=os.getenv("GEMINI_VISION_MODEL", "gemini-3.8-flash"),
         help="Gemini vision model (default: GEMINI_VISION_MODEL or gemini-3.8-flash)",
-    )
-    parser.add_argument(
-        "--media-resolution",
-        choices=("low", "medium", "high"),
-        default="high",
-        help="Gemini image processing resolution (default: high)",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -49,10 +38,7 @@ def main() -> None:
             api_key=api_key,
             model=args.model,
             timeout_seconds=args.timeout_seconds,
-        ).analyze(
-            args.image,
-            media_resolution=cast(MediaResolution, args.media_resolution),
-        )
+        ).analyze(args.image)
     except (ValueError, VisionAnalysisError) as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(1) from error

@@ -11,6 +11,7 @@ from app.vision.gemini_analyzer import (
     MAX_IMAGE_BYTES,
     GeminiImageAnalyzer,
     VisionAnalysisError,
+    _gemini_response_schema,
     _image_bytes_and_media_type,
 )
 from app.vision.schemas import CleanlinessVisionResult, ImageQuality
@@ -106,7 +107,7 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
         client=client,  # type: ignore[arg-type]
     )
 
-    analysis = analyzer.analyze(image_path, media_resolution="high")
+    analysis = analyzer.analyze(image_path)
 
     assert isinstance(analysis.result, CleanlinessVisionResult)
     assert analysis.result.image_quality is ImageQuality.USABLE
@@ -125,7 +126,7 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
     image_input = request_input[1]
     assert image_input["type"] == "image"  # type: ignore[index]
     assert image_input["mime_type"] == "image/jpeg"  # type: ignore[index]
-    assert image_input["resolution"] == "high"  # type: ignore[index]
+    assert "resolution" not in image_input  # type: ignore[operator]
     assert base64.b64decode(image_input["data"]) == image_path.read_bytes()  # type: ignore[index]
 
     response_format = client.interactions.arguments["response_format"]
@@ -133,8 +134,8 @@ def test_analyzer_sends_image_bytes_and_returns_typed_result(tmp_path: Path) -> 
     assert response_format["type"] == "text"
     assert response_format["mime_type"] == "application/json"
     schema = response_format["schema"]
-    assert schema == CleanlinessVisionResult.model_json_schema()
-    assert schema["additionalProperties"] is False
+    assert schema == _gemini_response_schema()
+    assert "additionalProperties" not in schema
     assert client.interactions.arguments["timeout"] == 180
 
 

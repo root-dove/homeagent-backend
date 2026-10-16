@@ -128,7 +128,7 @@ Remove-Item Env:GEMINI_VISION_MODEL
 - 영역별 문제와 사진에서 관찰한 근거
 - 호출 모델, 응답 ID, 입력·출력 토큰 사용량
 
-기본 모델은 신규 Gemini API 키에서 사용할 수 있는 `gemini-3.8-flash`, 이미지 처리 해상도는 `high`입니다. 계정에서 기본 모델을 사용할 수 없다면 이미지 입력과 구조화 출력을 지원하는 사용 가능한 Gemini 모델을 `GEMINI_VISION_MODEL` 또는 `--model`로 지정합니다. `--media-resolution low|medium|high`로 이미지 처리 해상도를 바꿀 수 있습니다. 이 도구는 아직 업로드된 capture, 모드 상태 전이, 분석 결과 DB 저장과 연결되지 않은 단일 사진 검증 단계입니다.
+기본 모델은 신규 Gemini API 키에서 사용할 수 있는 `gemini-3.8-flash`입니다. 원본 이미지 바이트를 그대로 전송하며 Gemini가 처리 해상도를 자동 선택합니다. 계정에서 기본 모델을 사용할 수 없다면 이미지 입력과 구조화 출력을 지원하는 사용 가능한 Gemini 모델을 `GEMINI_VISION_MODEL` 또는 `--model`로 지정합니다. 이 도구는 아직 업로드된 capture, 모드 상태 전이, 분석 결과 DB 저장과 연결되지 않은 단일 사진 검증 단계입니다.
 
 Gemini 3.8의 이미지 분석과 구조화 출력은 60초를 넘길 수 있어 기본 timeout은 180초입니다. 필요하면 `--timeout-seconds 300`처럼 조정할 수 있으며, timeout 오류는 긴 traceback 대신 원인을 한 줄로 출력합니다.
 
