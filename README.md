@@ -15,11 +15,12 @@ HomeAgent의 모드 상태, 촬영 스케줄, 비전 분석과 알림 이벤트�
 - 카메라 장치 등록·API 키 인증·heartbeat와 연결 상태 계산
 - 임대 기반 촬영 작업 수령·완료·실패·재시도 API
 - JPEG 검증·크기 제한·비공개 볼륨을 적용한 멱등 사진 업로드 API
+- OpenAI 비전 API에 로컬 사진 한 장을 보내 전체·영역별 청결도를 확인하는 실험용 CLI
 - Asia/Seoul 기본 방해 금지 및 모드별 재정의 정책
 - Docker Compose 기반 API·PostgreSQL 개발 환경
 - pytest와 Ruff 검증 환경
 
-실제 카메라 촬영과 비전 모델 연결은 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
+실험용 CLI는 비전 모델의 판정 형식을 먼저 검증하기 위한 독립 도구입니다. 실제 카메라 촬영 작업·DB·상태 머신과 비전 분석을 잇는 통합은 다음 개발 단계에서 추가합니다. 전체 요구사항과 진행 상황은 [PROJECT_PLAN.md](./PROJECT_PLAN.md)를 참고하세요.
 
 ## 빠른 실행
 
@@ -103,6 +104,33 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/modes" `
 같은 `run_id`를 다시 업로드하면 기존 capture를 반환하므로 파일을 중복 저장하지 않습니다. 파일은 `/service/data/captures`의 Docker 비공개 볼륨에 저장되고 API 응답에는 내부 경로가 노출되지 않습니다. 기본 만료 시각은 업로드 후 7일이며, 실제 만료 파일 삭제 작업은 다음 단계에서 구현합니다.
 
 사진이 없는 촬영 작업은 `/complete`만 호출해 완료할 수 없습니다. 업로드와 DB 저장이 성공해야 작업이 `completed`로 바뀝니다.
+
+## 외부 비전 API 단일 사진 테스트
+
+카메라가 없어도 Windows의 JPEG, PNG 또는 WebP 사진 한 장으로 외부 비전 모델의 청결도 판정을 먼저 시험할 수 있습니다. 최대 파일 크기는 15MB이며 Docker와 PostgreSQL은 필요하지 않습니다. 침실 사진은 외부 API로 전송되므로 처음에는 사람 얼굴, 문서, 화면 등 민감한 정보가 없는 테스트 사진을 권장합니다.
+
+API 키는 명령 인자나 저장소 파일에 넣지 않고 현재 PowerShell 프로세스의 환경 변수로만 전달합니다. 키를 채팅에 붙여 넣거나 `.env`에 커밋하지 마세요.
+
+```powershell
+$secureKey = Read-Host "OpenAI API key" -AsSecureString
+$env:OPENAI_API_KEY = [Net.NetworkCredential]::new("", $secureKey).Password
+$env:OPENAI_VISION_MODEL = "gpt-5.5"
+.\.venv\Scripts\python.exe -m app.cli.analyze_image "C:\path\room.jpg"
+Remove-Item Env:OPENAI_API_KEY
+Remove-Item Env:OPENAI_VISION_MODEL
+```
+
+출력은 다음 정보를 JSON으로 제공합니다.
+
+- 사진 품질과 품질 문제
+- 전체 판정(`clean`, `uncertain`, `dirty`), 점수와 신뢰도
+- 침대·책상·바닥 등 사진에서 확인 가능한 영역별 점수
+- 영역별 문제와 사진에서 관찰한 근거
+- 호출 모델, 응답 ID, 입력·출력 토큰 사용량
+
+기본 모델은 `gpt-5.5`, 이미지 상세도는 `high`입니다. 계정에서 기본 모델을 사용할 수 없다면 비전 입력과 Structured Outputs를 지원하는 사용 가능한 모델을 `OPENAI_VISION_MODEL` 또는 `--model`로 지정합니다. 이 도구는 아직 업로드된 capture, 모드 상태 전이, 분석 결과 DB 저장과 연결되지 않은 단일 사진 검증 단계입니다.
+
+구현 기준은 [OpenAI 이미지 입력 공식 문서](https://developers.openai.com/api/docs/guides/images-vision)와 [Structured Outputs 공식 문서](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses)를 따릅니다.
 
 종료:
 
