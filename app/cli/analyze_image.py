@@ -19,8 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("image", type=Path, help="Path to a local JPEG, PNG, or WebP image")
     parser.add_argument(
         "--model",
-        default=os.getenv("GEMINI_VISION_MODEL", "gemini-3.8-flash"),
-        help="Gemini vision model (default: GEMINI_VISION_MODEL or gemini-3.8-flash)",
+        default=os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash"),
+        help="Gemini vision model (default: GEMINI_VISION_MODEL or gemini-2.5-flash)",
     )
     parser.add_argument(
         "--media-resolution",

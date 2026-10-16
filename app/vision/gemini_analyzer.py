@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ from app.vision.schemas import CleanlinessVisionResult
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
 SUPPORTED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 MediaResolution = Literal["low", "medium", "high"]
+GEMINI_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z_-]+")
 
 
 class VisionAnalysisError(RuntimeError):
@@ -39,7 +41,7 @@ class GeminiImageAnalyzer:
         self,
         *,
         api_key: str,
-        model: str = "gemini-3.8-flash",
+        model: str = "gemini-2.5-flash",
         timeout_seconds: float = 60,
         max_retries: int = 2,
         client: genai.Client | None = None,
@@ -93,9 +95,7 @@ class GeminiImageAnalyzer:
                 ),
             )
         except errors.APIError as error:
-            raise VisionAnalysisError(
-                f"Gemini vision request failed ({type(error).__name__})."
-            ) from error
+            raise VisionAnalysisError(_safe_api_error(error)) from error
 
         if response.parsed is None:
             raise VisionAnalysisError("Gemini returned no structured cleanliness result.")
@@ -140,3 +140,11 @@ def _image_bytes_and_media_type(image_path: Path) -> tuple[bytes, str]:
     except OSError as error:
         raise VisionAnalysisError(f"Image file '{image_path}' cannot be read.") from error
     return image_bytes, media_type
+
+
+def _safe_api_error(error: errors.APIError) -> str:
+    code = getattr(error, "code", "unknown")
+    status = getattr(error, "status", "UNKNOWN") or "UNKNOWN"
+    message = getattr(error, "message", "Request was rejected.") or "Request was rejected."
+    safe_message = GEMINI_KEY_PATTERN.sub("[REDACTED]", str(message))
+    return f"Gemini vision request failed: HTTP {code} {status}: {safe_message}"

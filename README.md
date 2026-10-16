@@ -114,7 +114,7 @@ API 키는 명령 인자나 저장소 파일에 넣지 않고 현재 PowerShell 
 ```powershell
 $secureKey = Read-Host "Gemini API key" -AsSecureString
 $env:GEMINI_API_KEY = [Net.NetworkCredential]::new("", $secureKey).Password
-$env:GEMINI_VISION_MODEL = "gemini-3.8-flash"
+$env:GEMINI_VISION_MODEL = "gemini-2.5-flash"
 .\.venv\Scripts\python.exe -m app.cli.analyze_image "C:\path\room.jpg"
 Remove-Item Env:GEMINI_API_KEY
 Remove-Item Env:GEMINI_VISION_MODEL
@@ -128,7 +128,7 @@ Remove-Item Env:GEMINI_VISION_MODEL
 - 영역별 문제와 사진에서 관찰한 근거
 - 호출 모델, 응답 ID, 입력·출력 토큰 사용량
 
-기본 모델은 `gemini-3.8-flash`, 이미지 처리 해상도는 `high`입니다. 계정에서 기본 모델을 사용할 수 없다면 이미지 입력과 구조화 출력을 지원하는 사용 가능한 Gemini 모델을 `GEMINI_VISION_MODEL` 또는 `--model`로 지정합니다. `--media-resolution low|medium|high`로 이미지 처리 해상도를 바꿀 수 있습니다. 이 도구는 아직 업로드된 capture, 모드 상태 전이, 분석 결과 DB 저장과 연결되지 않은 단일 사진 검증 단계입니다.
+기본 모델은 API 키 호환성이 넓은 `gemini-2.5-flash`, 이미지 처리 해상도는 `high`입니다. 계정에서 기본 모델을 사용할 수 없다면 이미지 입력과 구조화 출력을 지원하는 사용 가능한 Gemini 모델을 `GEMINI_VISION_MODEL` 또는 `--model`로 지정합니다. `--media-resolution low|medium|high`로 이미지 처리 해상도를 바꿀 수 있습니다. 이 도구는 아직 업로드된 capture, 모드 상태 전이, 분석 결과 DB 저장과 연결되지 않은 단일 사진 검증 단계입니다.
 
 구현 기준은 [Gemini 이미지 이해 공식 문서](https://ai.google.dev/gemini-api/docs/image-understanding)와 [Gemini 구조화 출력 공식 문서](https://ai.google.dev/gemini-api/docs/structured-output)를 따릅니다.
 

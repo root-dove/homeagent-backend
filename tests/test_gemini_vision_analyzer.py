@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from google.genai import types
+from google.genai import errors, types
 from PIL import Image
 
 from app.vision.gemini_analyzer import (
@@ -36,6 +36,24 @@ class FakeModels:
 class FakeGemini:
     def __init__(self, output: dict[str, object] | None) -> None:
         self.models = FakeModels(output)
+
+
+class RejectingModels:
+    def generate_content(self, **kwargs: object) -> object:
+        raise errors.ClientError(
+            404,
+            {
+                "error": {
+                    "message": "models/gemini-missing is not found for key AIzaTESTSECRET",
+                    "status": "NOT_FOUND",
+                }
+            },
+        )
+
+
+class RejectingGemini:
+    def __init__(self) -> None:
+        self.models = RejectingModels()
 
 
 def cleanliness_payload() -> dict[str, object]:
@@ -111,6 +129,24 @@ def test_analyzer_rejects_missing_structured_output(tmp_path: Path) -> None:
 
     with pytest.raises(VisionAnalysisError, match="no structured"):
         analyzer.analyze(image_path)
+
+
+def test_analyzer_reports_safe_api_error_without_exposing_key(tmp_path: Path) -> None:
+    image_path = tmp_path / "room.jpg"
+    save_image(image_path)
+    analyzer = GeminiImageAnalyzer(
+        api_key="test-key",
+        client=RejectingGemini(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(VisionAnalysisError) as captured:
+        analyzer.analyze(image_path)
+
+    message = str(captured.value)
+    assert "HTTP 404 NOT_FOUND" in message
+    assert "gemini-missing" in message
+    assert "AIzaTESTSECRET" not in message
+    assert "[REDACTED]" in message
 
 
 def test_image_bytes_use_detected_format_not_extension(tmp_path: Path) -> None:
